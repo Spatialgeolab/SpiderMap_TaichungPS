@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Spider Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.1/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.1/dist/leaflet.markercluster.js"></script>
+<script src="leaflet-knn-master\leaflet-knn-master\leaflet-knn.js"></script>
+<script src="PS_type.js"></script>
+<script src="PS_icon.js"></script>
+
+</head>
+<body>
+<div id="map" style="height: 100vh; width: 100vw">
+  <script>
+    console.log(icons)
+    // Create a map
+    var map = L.map('map').setView([24.191075340950587,120.67623138427736], 13);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 17,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+    // 添加地圖標記
+    var collection = {
+    "type": "FeatureCollection",
+    "features": []
+    };
+    
+    let pointJSON 
+    let result=fetch('https://datacenter.taichung.gov.tw/swagger/OpenData/791a8a4b-ade6-48cf-b3ed-6c594e58a1f1')
+      .then(response => response.json())
+      .then((data)=>{
+        data.map((item)=>{
+        let point =new L.Marker([item.PS_Lat,item.PS_Lng]);
+        point.feature={
+          type:'Feature',
+          properties:{"車格編號":item['PS_ID'],"車位種類":PStype[item['status']],'是否有車':Boolean(Number(item['status']))},
+          geometry: undefined
+        }
+        collection.features.push(point.toGeoJSON())})
+        // collection.features=collection.features.slice(0,1000)
+      })
+      .then(()=>{
+        pointJSON=L.geoJSON(collection,{
+          filter:(feature)=>feature.properties['是否有車']===false,
+          onEachFeature:(feature,layer)=>{
+            layer.bindPopup('車格種類:'+feature.properties['車位種類']+'<br>車格編號: '+
+            feature.properties['車格編號']+'<br>'+'是否有車: '+feature.properties['是否有車']);
+            if (feature.properties['是否有車']){
+              layer.setIcon(icons[1]['icon'])
+            }else{
+              layer.setIcon(icons[0]['icon'])
+            }
+          }
+        })
+        let markersCluster = L.markerClusterGroup().addLayer(pointJSON).addTo(map);//
+      })
+    
+    function getClosestNMarker(markers,pointNum,latlng) {
+      let cloestPoint=leafletKnn(markers).nearest(latlng,pointNum)
+      return cloestPoint;
+    }
+    let multipolyline=L.polyline([])
+    map.on('move', function(e){
+      multipolyline.remove()
+      let latlang_N=[]
+      // 取得點擊事件的位置
+      // var lat = e.latlng.lat;
+      // var lng = e.latlng.lng;
+      let latlng = map.getCenter();
+      // 尋找最近的8個空車位
+      var closestMarker = getClosestNMarker(pointJSON,8,latlng);
+      // 尋找最近的8個空車位
+      if (closestMarker) {
+        // 在兩點間創造一個線段
+        for(let i=0;i<closestMarker.length;i++){
+        latlang_N.push([closestMarker[i].layer.getLatLng(),latlng])};
+      }
+      multipolyline = L.polyline(latlang_N).addTo(map)
+    }
+      )
+    </script>
+</div>
+</body>
+</html>
